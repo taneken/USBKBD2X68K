@@ -76,7 +76,7 @@ byte MSDATA;
 #define REPEATTIME      5   // キーを押し続けて、REP_INTERVALxREPEATTIMEmsec後にリピート開始
 #define EMPTY           0   // リピート管理テーブルが空状態
 #define MAXKEYENTRY     6   // リピート管理テーブルサイズ
-#define REP_INTERVAL    100 // リピート間隔 150msec
+#define REP_INTERVAL    50 // リピート間隔 50msec
 
 uint8_t keyentry[MAXKEYENTRY];    // リピート管理テーブル
 uint8_t repeatWait[MAXKEYENTRY];  // リピート開始待ち管理テーブル
