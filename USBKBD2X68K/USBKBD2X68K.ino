@@ -1,8 +1,9 @@
 //----------------------------------------------------------------------
 // USBKBD2X68K for Arduino uno(ATMEGA328p compatible)
-// X68000のキーボードコネクタにUSBキーボードとUSBマウスを接続します
+// X68000のキーボードコネクタにUSBキーボードとUSBマウスを接続
 //----------------------------------------------------------------------
 // 2020.11.09 Ver.0.1   とりあえず動いた版
+// 2020.12.30 Ver.0.2   キーリピート間隔の実装（しかし実機と挙動が異なる）
 //----------------------------------------------------------------------
 // このスケッチのコンパイルには以下のライブラリが必要です.
 //  ・USB_Host_Shield_2.0 (https://github.com/felis/USB_Host_Shield_2.0)
@@ -39,7 +40,7 @@
 //  本体側             Arduino側
 //  -------------------------------------------
 //  1:Vcc2 5V(out) -> 5V
-//  2:MSDATA(out)  <- TX(1)
+//  2:MSDATA(in)   <- TX(1)
 //  3:KEYRxD(in)   <- A0(14) softwareSerial TX 
 //  4:KEYTxD(out)  -> A1(15) softwareSerial RX
 //  5:READY(out)
@@ -76,7 +77,8 @@ byte MSDATA;
 #define REPEATTIME      5   // キーを押し続けて、REP_INTERVALxREPEATTIMEmsec後にリピート開始
 #define EMPTY           0   // リピート管理テーブルが空状態
 #define MAXKEYENTRY     6   // リピート管理テーブルサイズ
-#define REP_INTERVAL    50 // リピート間隔 50msec
+//#define REP_INTERVAL    50 // リピート間隔
+uint8_t REP_INTERVAL = 50;
 
 uint8_t keyentry[MAXKEYENTRY];    // リピート管理テーブル
 uint8_t repeatWait[MAXKEYENTRY];  // リピート開始待ち管理テーブル
@@ -118,8 +120,9 @@ USBHub  Hub3(&Usb);
 USBHub  Hub4(&Usb);
 
 BTD     Btd(&Usb);
-//BTHID   bthid(&Btd, PAIR);
 BTHID   bthid(&Btd);
+//BTHID   bthid(&Btd, PAIR);
+//BTHID   bthid(&Btd, PAIR, "0000");
 
 HIDBoot<3>    HidComposite(&Usb);
 HIDBoot<1>    HidKeyboard(&Usb);
@@ -277,7 +280,9 @@ void KbdRptParser::OnKeyDown(uint8_t mod, uint8_t key) {
   if (code == 0x00)
     return;
 
-//  Serial.print(F("keytable="));Serial.print(key,HEX);Serial.print(F(" code=")); Serial.println(code,HEX);
+#if MYDEBUG == 1
+  Serial.print(F("keytable="));Serial.print(key,HEX);Serial.print(F(" code=")); Serial.println(code,HEX);
+#endif
   byte_send(code);
   addKey(key);
   MsTimer2::start();
@@ -297,7 +302,9 @@ void KbdRptParser::OnKeyUp(uint8_t mod, uint8_t key) {
     return;
 
   code |= 0x80; // 離すときは 1000 0000 にビットを立てる
+#if MYDEBUG == 1
 //  Serial.print(F("keytable="));Serial.print(key,HEX);Serial.print(F(" code=")); Serial.println(code,HEX);
+#endif
   byte_send(code);
   delKey(key);
   MsTimer2::start();
@@ -445,6 +452,12 @@ uint8_t getIntClass(byte& intclass, byte& intSubClass ) {
   return ( flgFound );
 }
 
+void rep_timer() {
+  MsTimer2::set(REP_INTERVAL, sendRepeat); 
+  MsTimer2::start();
+}
+
+
 void setup() {
 
   Serial.begin(4800,SERIAL_8N2);  //MSDATA送信用
@@ -458,7 +471,7 @@ void setup() {
   }
   delay( 200 );
 //  Serial.println(F("BT Start."));
-  bthid.SetReportParser(KEYBOARD_PARSER_ID, &keyboardPrs);
+//  bthid.SetReportParser(KEYBOARD_PARSER_ID, &keyboardPrs);
   bthid.SetReportParser(MOUSE_PARSER_ID, &MousePrs);
   bthid.setProtocolMode(USB_HID_BOOT_PROTOCOL); // Boot Protocol Mode
 
@@ -469,12 +482,15 @@ void setup() {
   HidMouse.SetReportParser(0, &MousePrs);
 
   claerKeyEntry();
-  MsTimer2::set(REP_INTERVAL, sendRepeat); 
-  MsTimer2::start();
+//  MsTimer2::set(REP_INTERVAL, sendRepeat); 
+//  MsTimer2::start();
+  rep_timer(); 
 
 //  Serial.println(F("Start."));
 
 }
+
+
 
 void loop() {
 
@@ -511,7 +527,7 @@ void loop() {
   if (KBDSerial.available()) {  //データなしは-1が流れてる
     MSCTRL = KBDSerial.read();
     if (MSCTRL == 64 && oldCTRL == 65) {  //highからlowになった
-#if MYDEBUG == 1  
+#if MYDEBUG == 2
       Serial.print(F("MSCTRL = ")); Serial.print(MSCTRL);
       Serial.print(F(" LEFT  = ")); Serial.print(LeftButton); Serial.print(F(" RIGHT = ")); Serial.print(RightButton);
       Serial.print(F(" dX = ")); Serial.print(dx,HEX); Serial.print(F(" 2dX = ")); Serial.print(dx,BIN);
@@ -534,6 +550,21 @@ void loop() {
     }
     if (MSCTRL == 64 || MSCTRL == 65) {
       oldCTRL = MSCTRL;   //MSCTRLデータのみ保存（他のデータも流れてくるかもしれないので）
+    }
+
+//    Serial.println(MSCTRL>>4);
+
+    // キーリピート開始時間（未実装）
+    if (MSCTRL>>4 == 0x06) {
+//      Serial.print("DELAY : ");
+//      Serial.println(200+(MSCTRL&B00001111)*100);
+    }
+    // キーリピート間隔（実機と異なる）
+    if (MSCTRL>>4 == 0x07) {
+//      Serial.print("REP   : ");
+//      Serial.println(30+(MSCTRL&B00001111)*(MSCTRL&B00001111)*5);
+      REP_INTERVAL = 30+(MSCTRL&B00001111)*(MSCTRL&B00001111)*5;
+      rep_timer();
     }
   }
 }
