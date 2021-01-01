@@ -4,6 +4,7 @@
 //----------------------------------------------------------------------
 // 2020.11.09 Ver.0.1   とりあえず動いた版
 // 2020.12.30 Ver.0.2   キーリピート間隔の実装（しかし実機と挙動が異なる）
+// 2021.01.02 Ver.0.3   MOUSE_MODEでマウスを使用しないときはOFF出来るようにした
 //----------------------------------------------------------------------
 // このスケッチのコンパイルには以下のライブラリが必要です.
 //  ・USB_Host_Shield_2.0 (https://github.com/felis/USB_Host_Shield_2.0)
@@ -50,6 +51,8 @@
 //----------------------------------------------------------------------
 
 #define MYDEBUG      0
+
+#define MOUSE_MODE   0            // 0:未使用 1:使用（ハードウェアシリアル）
 
 #include <BTHID.h>
 #include <hidboot.h>
@@ -460,7 +463,9 @@ void rep_timer() {
 
 void setup() {
 
+#if MOUSE_MODE == 1
   Serial.begin(4800,SERIAL_8N2);  //MSDATA送信用
+#endif
   KBDSerial.begin(2400);
 //  Serial.println("Self Test OK.");
 
@@ -551,8 +556,6 @@ void loop() {
     if (MSCTRL == 64 || MSCTRL == 65) {
       oldCTRL = MSCTRL;   //MSCTRLデータのみ保存（他のデータも流れてくるかもしれないので）
     }
-
-//    Serial.println(MSCTRL>>4);
 
     // キーリピート開始時間（未実装）
     if (MSCTRL>>4 == 0x06) {
