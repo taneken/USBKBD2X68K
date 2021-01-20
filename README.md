@@ -22,7 +22,7 @@ IBM RT3200
 * HHKB Lite2(USBハブを内蔵しているためUSBHOSTのライブラリで具合悪いらしい)
 
 ## 配線図
-![](keyboard_connector.png)
+![](images/keyboard_connector.png)
 ```
 //  本体側             Arduino側
 //  -------------------------------------------
@@ -35,20 +35,13 @@ IBM RT3200
 //  7:GND(--)      -- GND
 ```
 
-## PS/2ケーブルの加工
-キーボードコネクタは7ピンですが6ピン目のREMOTEはこの変換機では使用していないのでMiniDIN6pケーブルを加工して使用できます。また中央にあるプラスティックの足はニッパーなどで切断することで7ピン端子に刺すことが可能になります。
-
-[カモンのPSK-18](https://www.sengoku.co.jp/mod/sgk_cart/detail.php?code=4AC4-DTEN)なんてお手頃です。1本から2つ採取できます。
-
-![](miniDIN7pin_male.jpg)
-
 ## キーアサイン
 109キーボードではすべてのキーをアサインすることができません。なので使用頻度の低いキーをアサインしていません。
 もし変更したいときはArduinoのソースを修正するか、[KeyWitch.x](http://retropc.net/x68000/software/system/key/keywitch/)等ソフトウェアでキーアサインを変更できるソフトを使用してください。
 
 私はSted2でリズム画面に入るため記号入力や登録キーを押す必要がありますが、Keywitchでsted2を使用するときだけ「BREAK」と「COPY」を「記号入力」と「登録」に入れ替えて使用しています。
 
-![](109.jpg)
+![](images/109.jpg)
 
 #### キーアサイン初期状態
 ```
@@ -73,6 +66,57 @@ IBM RT3200
 //  ・          -> コード入力(0x5c)
 //  ・          -> 登録(0x53)
 ```
+
+## Arduino Pro Mini用のUSBHOSTを使用したバージョンの作成方法
+
+### USBHOSTの加工
+参考ページ:https://ht-deko.com/arduino/shield_usbhost_mini.html
+
+__カット部分__
+![](images/cut.jpg)
+__テスターでチェック__
+ここが通電しなければOK
+![](images/DSC04025.jpg)
+
+### Arduinoの足付け
+そのまま足を付けると斜めになるので、下にUSBHOSTを敷いてはんだ付けすると良いよ
+![](images/DSC04026.jpg)
+![](images/DSC04027.jpg)
+
+USB端子とFTDI端子が反対になるように合わせる
+![](images/DSC04030.jpg)
+
+USBの5VをRAWをつなげるためのケーブル(約43mm)
+![](images/DSC04032.jpg)
+裏側で結線する
+![](images/DSC04034.jpg)
+
+レベルコンバータを両面テープで絶縁して貼り付ける
+![](images/DSC04035.jpg)
+![](images/DSC04037.jpg)
+
+A0とA1とVCCの足を曲げてLV4,LV3,LVに接続する。
+A2とA3は邪魔なので根本からカット
+![](images/DSC04040.jpg)
+
+GND(黒)の接続とTXとLV1(白)を接続する
+![](images/DSC04041.jpg)
+
+`概ね終了。あとはMiniDin7pとの接続`
+
+実際に接続するのは5本
+![](images/pin.jpg)
+
+### PS/2ケーブルの加工
+キーボードコネクタは7ピンですが6ピン目のREMOTEはこの変換機では使用していないのでMiniDIN6pケーブルを加工して使用できます。また中央にあるプラスティックの足はニッパーなどで切断することで7ピン端子に刺すことが可能になります。
+
+[カモンのPSK-18](https://www.sengoku.co.jp/mod/sgk_cart/detail.php?code=4AC4-DTEN)なんてお手頃です。1本から2つ採取できます。
+
+![](images/miniDIN7pin_male.jpg)
+
+### 完成
+![](images/kansei.jpg)
+![](images/kansei2.jpg)
 
 ## キーリピート間隔の設定(Ver.0.2)
 Ver.0.2よりswitch.xで設定したキーリピート間隔の設定値を反映させました。
