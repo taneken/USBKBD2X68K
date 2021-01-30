@@ -52,7 +52,7 @@
 
 #define MYDEBUG      0
 
-#define MOUSE_MODE   0            // 0:未使用 1:使用（ハードウェアシリアル）
+#define MOUSE_MODE   1            // 0:未使用 1:使用（ハードウェアシリアル）
 
 #include <BTHID.h>
 #include <hidboot.h>
