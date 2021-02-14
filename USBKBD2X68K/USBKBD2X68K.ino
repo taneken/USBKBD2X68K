@@ -5,6 +5,7 @@
 // 2020.11.09 Ver.0.1   とりあえず動いた版
 // 2020.12.30 Ver.0.2   キーリピート間隔の実装（しかし実機と挙動が異なる）
 // 2021.01.02 Ver.0.3   MOUSE_MODEでマウスを使用しないときはOFF出来るようにした
+// 2021.02.14 Ver.0.4   MOUSE_MODE廃止,MOUSE CONTROLを実装,記号入力/登録/コード入力をテンキーに割り当て
 //----------------------------------------------------------------------
 // このスケッチのコンパイルには以下のライブラリが必要です.
 //  ・USB_Host_Shield_2.0 (https://github.com/felis/USB_Host_Shield_2.0)
@@ -27,10 +28,9 @@
 //  ・Pause     -> BREAK(0x61)
 //  ・PrintScr  -> COPY(0x62)
 //  ・NumLock   -> CLR(0x3f)
-// 未アサイン
-//  ・          -> 記号入力(0x52)
-//  ・          -> コード入力(0x5c)
-//  ・          -> 登録(0x53)
+//  ・Num /     -> 記号入力(0x52)
+//  ・Num *     -> 登録(0x53)
+//  ・Num -     -> コード入力(0x5c)
 //----------------------------------------------------------------------
 // キーボードコネクタ配線(本体側)
 //
@@ -48,21 +48,25 @@
 //  6:REMOTE(in)
 //  7:GND(--)      -- GND
 //
+// mouse control
+//  mouse          -- D2(2)/A2(16)
 //----------------------------------------------------------------------
 
 #define MYDEBUG      0
-
-#define MOUSE_MODE   1            // 0:未使用 1:使用（ハードウェアシリアル）
 
 #include <BTHID.h>
 #include <hidboot.h>
 #include <usbhub.h>
 #include <MsTimer2.h>
 #include <SoftwareSerial.h>
-
 #include "keymap.h"
 
-SoftwareSerial KBDSerial(15,14); // RX(KEYTxD/MSCTRL), TX(KEYRxD)
+#define KBD_TX      14    //KeyBoard TX
+#define KBD_RX      15    //KeyBoard RX
+#define MOUSE_OFF   2    //Mouse Disable      D2
+//#define MOUSE_OFF   16    //Mouse Disable   A2  //zα2氏仕様
+
+SoftwareSerial KBDSerial(KBD_RX,KBD_TX); // RX(KEYTxD/MSCTRL), TX(KEYRxD)
 
 #define LOBYTE(x) ((char*)(&(x)))[0]
 #define HIBYTE(x) ((char*)(&(x)))[1]
@@ -81,8 +85,7 @@ byte MSDATA;
 #define EMPTY           0   // リピート管理テーブルが空状態
 #define MAXKEYENTRY     6   // リピート管理テーブルサイズ
 //#define REP_INTERVAL    50 // リピート間隔
-uint8_t REP_INTERVAL = 50;
-
+uint8_t REP_INTERVAL = 50;  // リピート間隔
 uint8_t keyentry[MAXKEYENTRY];    // リピート管理テーブル
 uint8_t repeatWait[MAXKEYENTRY];  // リピート開始待ち管理テーブル
 
@@ -117,10 +120,7 @@ class MouseRptParser : public MouseReportParser {
 //-----------------------------------------------------------------------------
 
 USB     Usb;
-USBHub  Hub1(&Usb);
-USBHub  Hub2(&Usb);
-USBHub  Hub3(&Usb);
-USBHub  Hub4(&Usb);
+USBHub  Hub(&Usb);
 
 BTD     Btd(&Usb);
 BTHID   bthid(&Btd);
@@ -186,6 +186,10 @@ uint8_t subClassType = 0;
 void byte_send(char code) {
   KBDSerial.listen();
   KBDSerial.write(code);
+
+#if MYDEBUG
+  Serial.println(code);
+#endif
 }
 
 //
@@ -223,7 +227,7 @@ void delKey(uint8_t key) {
 
 // リピート処理(タイマー割り込み処理から呼ばれる)
 void sendRepeat() {
-  // HID Usage ID から PS/2 スキャンコード に変換
+  // HID Usage ID から X68000 スキャンコード に変換
   uint8_t key;
   uint8_t code;
   
@@ -305,8 +309,8 @@ void KbdRptParser::OnKeyUp(uint8_t mod, uint8_t key) {
     return;
 
   code |= 0x80; // 離すときは 1000 0000 にビットを立てる
-#if MYDEBUG == 1
-//  Serial.print(F("keytable="));Serial.print(key,HEX);Serial.print(F(" code=")); Serial.println(code,HEX);
+#if MYDEBUG
+  Serial.print(F("keytable="));Serial.print(key,HEX);Serial.print(F(" code=")); Serial.println(code,HEX);
 #endif
   byte_send(code);
   delKey(key);
@@ -460,27 +464,73 @@ void rep_timer() {
   MsTimer2::start();
 }
 
+//
+// マウスデータ送信部分
+//
+void mouse_send() {
+  if (MSCTRL == 64 && oldCTRL == 65) {  //highからlowになった
+#if MYDEBUG == 3
+    Serial.print(F("MSCTRL = ")); Serial.print(MSCTRL);
+    Serial.print(F(" LEFT  = ")); Serial.print(LeftButton); Serial.print(F(" RIGHT = ")); Serial.print(RightButton);
+    Serial.print(F(" dX = ")); Serial.print(dx,HEX); Serial.print(F(" 2dX = ")); Serial.print(dx,BIN);
+    Serial.print(F(" dX = ")); Serial.print(dx>>1,HEX); Serial.print(F(" 2dX = ")); Serial.print(dx>>1,BIN);
+    Serial.print(F(" dY = ")); Serial.print(dy,HEX); Serial.print(F(" 2dY = ")); Serial.print(dy,BIN);
+    Serial.print(F(" dY = ")); Serial.print(dy>>1,HEX); Serial.print(F(" 2dY = ")); Serial.println(dy>>1,BIN);
+#endif
+
+//    delay抜いても何故か動いてます
+//      delayMicroseconds(700);
+    MSDATA = B00000000;
+    if (LeftButton) MSDATA |= B00000001;    // 左クリック
+    if (RightButton) MSDATA |= B00000010;   // 右クリック
+//      Serial.print(F("MSDATA = ")); Serial.println(MSDATA);
+    Serial.write(MSDATA);
+    Serial.write(dx);
+    dx=0; // 一度送信したらリセット
+    Serial.write(dy);
+    dy=0; // 一度送信したらリセット
+  }
+  if (MSCTRL == 64 || MSCTRL == 65) {
+    oldCTRL = MSCTRL;   //MSCTRLデータのみ保存（他のデータも流れてくるかもしれないので）
+  }
+}
+
 
 void setup() {
 
-#if MOUSE_MODE == 1
-  Serial.begin(4800,SERIAL_8N2);  //MSDATA送信用
-#endif
   KBDSerial.begin(2400);
-//  Serial.println("Self Test OK.");
+
+#if MYDEBUG
+  Serial.println("Self Test OK.");
+#endif
 
 // USB初期化
   if (Usb.Init() == -1) {
-//    Serial.println(F("OSC did not start."));
+#if MYDEBUG
+    Serial.println(F("OSC did not start."));
+#endif
     while (1); // Halt    
   }
   delay( 200 );
+  pinMode(MOUSE_OFF, INPUT_PULLUP); // Inputモードでプルアップ抵抗を有効
+
+#if MYDEBUG
+  Serial.println(digitalRead(MOUSE_OFF));
+#endif
+
+    if(digitalRead(MOUSE_OFF) == HIGH) {
+      Serial.begin(4800,SERIAL_8N2);  //MSDATA送信用
+    }
+
 //  Serial.println(F("BT Start."));
 //  bthid.SetReportParser(KEYBOARD_PARSER_ID, &keyboardPrs);
   bthid.SetReportParser(MOUSE_PARSER_ID, &MousePrs);
   bthid.setProtocolMode(USB_HID_BOOT_PROTOCOL); // Boot Protocol Mode
 
-//  Serial.println(F("HID Start."));
+#if MYDEBUG
+  Serial.println(F("HID Start."));
+#endif
+
   HidComposite.SetReportParser(0, &keyboardPrs);
   HidComposite.SetReportParser(1, &MousePrs);
   HidKeyboard.SetReportParser(0, &keyboardPrs);
@@ -491,81 +541,30 @@ void setup() {
 //  MsTimer2::start();
   rep_timer(); 
 
-//  Serial.println(F("Start."));
-
+#if MYDEBUG
+  Serial.println(F("Setup End."));
+#endif
 }
-
-
 
 void loop() {
 
+
+  
   Usb.Task();
-#if MYDEBUG == 1  
-  Serial.println(Usb.getUsbTaskState());
-  if ( (classType == 0) && (Usb.getUsbTaskState() == USB_STATE_RUNNING) )  {  
-    // デバイスクラス情報の取得
-    getIntClass(classType, subClassType) ;
-    Serial.print(F("class="));  Serial.println(classType, HEX);
-    Serial.print(F("subclass="));  Serial.println(subClassType, HEX);
-  }
 
-  static uint8_t prevSts = 0xFF;
-  if (Usb.getUsbTaskState() != prevSts) {
-    prevSts = Usb.getUsbTaskState();
-    Serial.print(F("sts="));  Serial.println(prevSts, HEX);
-  }
-  if (Serial.available()) {
-    Serial.read();
-    for (uint8_t i=-0; i < MAXKEYENTRY; i++) {
-      Serial.print(F("keyentry["));
-      Serial.print(i,DEC);
-      Serial.print(F("]="));
-      Serial.println(keyentry[i],HEX);
-    }
-  }
-#endif
-
-//
-// マウスデータ送信部分
-//
   KBDSerial.listen();
   if (KBDSerial.available()) {  //データなしは-1が流れてる
     MSCTRL = KBDSerial.read();
-    if (MSCTRL == 64 && oldCTRL == 65) {  //highからlowになった
-#if MYDEBUG == 2
-      Serial.print(F("MSCTRL = ")); Serial.print(MSCTRL);
-      Serial.print(F(" LEFT  = ")); Serial.print(LeftButton); Serial.print(F(" RIGHT = ")); Serial.print(RightButton);
-      Serial.print(F(" dX = ")); Serial.print(dx,HEX); Serial.print(F(" 2dX = ")); Serial.print(dx,BIN);
-      Serial.print(F(" dX = ")); Serial.print(dx>>1,HEX); Serial.print(F(" 2dX = ")); Serial.print(dx>>1,BIN);
-      Serial.print(F(" dY = ")); Serial.print(dy,HEX); Serial.print(F(" 2dY = ")); Serial.print(dy,BIN);
-      Serial.print(F(" dY = ")); Serial.print(dy>>1,HEX); Serial.print(F(" 2dY = ")); Serial.println(dy>>1,BIN);
-#endif
 
-//    delay抜いても何故か動いてます
-//      delayMicroseconds(700);
-      MSDATA = B00000000;
-      if (LeftButton) MSDATA |= B00000001;    // 左クリック
-      if (RightButton) MSDATA |= B00000010;   // 右クリック
-//      Serial.print(F("MSDATA = ")); Serial.println(MSDATA);
-      Serial.write(MSDATA);
-      Serial.write(dx);
-      dx=0; // 一度送信したらリセット
-      Serial.write(dy);
-      dy=0; // 一度送信したらリセット
-    }
-    if (MSCTRL == 64 || MSCTRL == 65) {
-      oldCTRL = MSCTRL;   //MSCTRLデータのみ保存（他のデータも流れてくるかもしれないので）
+    if(digitalRead(MOUSE_OFF) == HIGH) {
+      mouse_send();       //マウス送信
     }
 
     // キーリピート開始時間（未実装）
     if (MSCTRL>>4 == 0x06) {
-//      Serial.print("DELAY : ");
-//      Serial.println(200+(MSCTRL&B00001111)*100);
     }
     // キーリピート間隔（実機と異なる）
     if (MSCTRL>>4 == 0x07) {
-//      Serial.print("REP   : ");
-//      Serial.println(30+(MSCTRL&B00001111)*(MSCTRL&B00001111)*5);
       REP_INTERVAL = 30+(MSCTRL&B00001111)*(MSCTRL&B00001111)*5;
       rep_timer();
     }

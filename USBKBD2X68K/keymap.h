@@ -84,9 +84,9 @@ const uint8_t keytable[] PROGMEM = {
     0x3e,    // 51h  DOWN
     0x3c,    // 52h  UP
     0x3f,    // 53h  CLR
-    0x40,    // 54h  Num /
-    0x41,    // 55h  Num *
-    0x42,    // 56h  Num -
+    0x52,    // 54h  記号入力     // 0x40 Num /
+    0x53,    // 55h  登録        // 0x41 Num *
+    0x5c,    // 56h  コード入力   // 0x42 Num -
     0x46,    // 57h  Num +
     0x4e,    // 58h  Num Enter
     0x4b,    // 59h  Num 1
